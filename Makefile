@@ -16,6 +16,6 @@ configure:
 	@${PYTHON_VENV}/bin/pip3 install -r requirements.txt
 
 fclean:
-	@rm -rf ${PYTHON_VENV} ~/${INFECTION_DIR} key
+	@rm -rf ${PYTHON_VENV} ${INFECTION_DIR} key
 
 re: clean configure
